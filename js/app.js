@@ -33,7 +33,6 @@ jQuery(document).ready(function($) {
       e.preventDefault();
     }
   });
-
 });
 
 Vue.transition('weather', {
@@ -354,8 +353,36 @@ new Vue({
 
     getLocation: function () {
       $.getJSON('https://maps.googleapis.com/maps/api/geocode/json?latlng=' + this.lat + ',' + this.lng, function(results) {
-        this.location.city = results.results[4]['address_components'][0]['long_name'];
-				this.location.region = results.results[4]['address_components'][1]['long_name'];
+        var arrAddress = results.results[0].address_components;
+        var itemRegion='';
+        var itemLocality='';
+        var itemCountry='';
+
+
+        // iterate through address_component array
+        $.each(arrAddress, function (i, address_component) {
+            if (address_component.types[0] == "locality"){
+                itemLocality = address_component.long_name;
+            }
+
+            if (address_component.types[0] == "country"){
+                itemCountry = address_component.long_name;
+            }
+
+            if (address_component.types[0] == "administrative_area_level_1"){
+                itemRegion = address_component.long_name;
+            }
+        });
+
+        this.location.city = itemLocality;
+        this.location.region = itemRegion;
+        this.location.state = itemCountry;
+
+        if(!itemLocality){
+          this.location.city = itemRegion;
+        }
+
+
 			}.bind(this));
     },
 
@@ -394,72 +421,83 @@ new Vue({
     },
 
     getTemp: function () {
-      $.getJSON('http://api.openweathermap.org/data/2.5/weather?lat=' + this.lat + '&lon=' + this.lng + '&APPID=a70390a56e504a6e42fbec688616f573', function(results) {
-				this.weather.current = Math.round(results['main']['temp'] - 273.15 );
-				this.weather.min = Math.round(results['main']['temp_min'] - 273.15 );
-        this.weather.max = Math.round(results['main']['temp_max'] - 273.15 );
+      $.ajax({
+        type: "GET",
+        url: 'http://api.openweathermap.org/data/2.5/weather?lat=' + this.lat + '&lon=' + this.lng + '&mode=xml&APPID=a70390a56e504a6e42fbec688616f573',
+        dataType: "xml",
+        success: function(xml) {
+          this.weather.current = Math.round($(xml).find('temperature').attr('value')-273,15);
+          this.weather.min = Math.round($(xml).find('temperature').attr('min')-273,15);
+          this.weather.max = Math.round($(xml).find('temperature').attr('max')-273,15);
 
-        this.weather.clouds = results.clouds.all;
-        var weather = results.weather;
+          this.weather.clouds = $(xml).find('clouds').attr('value');
+          var id = $(xml).find('weather').attr('number');
+          this.weather.id = id;
+          this.weather.img = "";
 
-        var id = weather[0].id;
-        this.weather.id = id;
+          this.reset();
 
-        this.weather.img = "";
+          if(id >= 200 && id <= 300){
+            this.weather.thunderstorm = true;
+            this.weather.img = "light_thunderstorm";
 
-        if(id >= 200 && id <= 300){
-          this.weather.thunderstorm = true;
-          this.weather.img = "light_thunderstorm";
-
-          if(id > 212){
-            this.weather.img = "heavy_thunderstorm";
-          }
-        }
-
-        if(id >= 300 && id <= 400){
-          this.weather.drizzle = true;
-          this.weather.img = "light_drizzle";
-
-          if(id >= 312){
-            this.weather.img = "heavy_drizzle";
-          }
-        }
-
-        if(id >= 500 && id <= 600){
-          this.weather.rain = true;
-          this.weather.img = "rain";
-
-          if(id >= 302){
-            this.weather.heavy_rain = true;
-            this.weather.img = "heavy_rain";
-          }
-        }
-
-        if(id >= 600 && id <= 700){
-          this.weather.snow = true;
-          this.weather.img = "snow";
-        }
-
-        if(id >= 800 && id <= 804){
-          this.weather.img = "few_clouds";
-          if(id >= 803){
-            this.weather.img = "clouds";
-            if(id == 804){
-              this.weather.img = "many_clouds";
+            if(id > 212){
+              this.weather.img = "heavy_thunderstorm";
             }
           }
-        }
 
-        if(id == 800){
-          this.weather.img = "sun";
-        }
+          if(id >= 300 && id <= 400){
+            this.weather.drizzle = true;
+            this.weather.img = "light_drizzle";
 
-        this.getText();
-        this.ready = true;
+            if(id >= 312){
+              this.weather.img = "heavy_drizzle";
+            }
+          }
 
-			}.bind(this));
+          if(id >= 500 && id <= 600){
+            this.weather.rain = true;
+            this.weather.img = "rain";
 
+            if(id >= 302){
+              this.weather.heavy_rain = true;
+              this.weather.img = "heavy_rain";
+            }
+          }
+
+          if(id >= 600 && id <= 700){
+            this.weather.snow = true;
+            this.weather.img = "snow";
+          }
+
+          if(id >= 800 && id <= 804){
+            this.weather.img = "few_clouds";
+            if(id >= 803){
+              this.weather.img = "clouds";
+              if(id == 804){
+                this.weather.img = "many_clouds";
+              }
+            }
+          }
+
+          if(id == 800){
+            this.weather.img = "sun";
+          }
+
+          if(id == -1){
+            this.weather.img = "sun";
+          }
+
+          this.getText();
+
+          this.ready = true;
+
+          this.printData();
+
+        }.bind(this)
+      });
     },
+
 
     printData: function (){
       console.log("Current Temp: " + this.weather.current);
@@ -494,6 +532,17 @@ new Vue({
         this.getTime();
         this.getTemp();
 			}.bind(this));
+    },
+
+    reset: function () {
+      this.weather.clouds = 0;
+      this.weather.thunderstorm = false;
+      this.weather.drizzle = false;
+      this.weather.rain = false;
+      this.weather.heavy_rain = false;
+      this.weather.snow = false;
+      this.weather.id = -1;
+      this.weather.img = '';
     },
   },
 
